@@ -15,7 +15,8 @@ def create_app(config_class=None):
         config_class = get_config()
     app.config.from_object(config_class)
 
-    CORS(app, origins=app.config.get('CORS_ORIGINS', '*'), supports_credentials=True)
+    # Allow all origins for cross-origin requests
+    CORS(app, resources={r"/*": {"origins": "*"}})
     socketio.init_app(app)
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)

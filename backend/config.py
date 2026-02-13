@@ -21,7 +21,8 @@ class Config:
     DEFAULT_THRESHOLD = 0.5
     DEFAULT_VIDEO_FRAMES = 50
 
-    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
+    # CORS: Allow Vercel domains and localhost
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')
     SOCKETIO_ASYNC_MODE = 'eventlet'
 
 
