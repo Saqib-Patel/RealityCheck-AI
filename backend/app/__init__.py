@@ -29,6 +29,20 @@ def create_app(config_class=None):
 
     from app.websocket import handlers  # noqa: F401
 
+    @app.route('/')
+    def root():
+        return {
+            'name': 'RealityCheck AI API',
+            'version': '2.0.0',
+            'endpoints': {
+                'health': '/health/',
+                'models': '/api/v1/models',
+                'analyze_image': '/api/v1/analyze/image',
+                'analyze_video': '/api/v1/analyze/video',
+            },
+            'docs': 'https://github.com/Saqib-Patel/RealityCheck-AI'
+        }
+
     @app.errorhandler(404)
     def not_found(error):
         return {'error': 'Not found', 'status': 404}, 404
