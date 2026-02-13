@@ -1,5 +1,6 @@
 import os
 import sys
+import gc
 import time
 import logging
 from datetime import datetime
@@ -16,6 +17,9 @@ from torch.utils.model_zoo import load_url
 from scipy.special import expit
 from scipy.fft import dctn
 from scipy.ndimage import uniform_filter
+
+# Memory optimization for Render free tier
+LOW_MEMORY_MODE = os.environ.get('LOW_MEMORY_MODE', 'true').lower() == 'true'
 
 BASE_DIR = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(BASE_DIR))
@@ -37,6 +41,7 @@ class DeepFakeDetector:
         self._facedet = None
         self._face_extractor = None
         self._init_face_detector()
+        logger.info(f"DeepFakeDetector initialized. LOW_MEMORY_MODE={LOW_MEMORY_MODE}, device={self.device}")
 
     def _init_face_detector(self):
         blazeface_dir = BASE_DIR / 'blazeface'
@@ -45,10 +50,26 @@ class DeepFakeDetector:
         self._facedet.load_anchors(str(blazeface_dir / "anchors.npy"))
         self._video_reader = VideoReader(verbose=False)
 
+    def _cleanup_memory(self):
+        """Force garbage collection to free memory."""
+        if LOW_MEMORY_MODE:
+            self._model_cache.clear()
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            logger.info("Memory cleanup completed")
+
     def _get_model(self, model_name: str, dataset: str) -> torch.nn.Module:
         # cache_key = "EfficientNetAutoAttB4_DFDC" etc — picks the right pretrained weights
         cache_key = f"{model_name}_{dataset}"
+        
+        # In low memory mode, clear cache before loading new model
+        if LOW_MEMORY_MODE and cache_key not in self._model_cache:
+            self._model_cache.clear()
+            gc.collect()
+        
         if cache_key not in self._model_cache:
+            logger.info(f"Loading model: {cache_key}")
             model_url = weights.weight_url[cache_key]
             net = getattr(fornet, model_name)().eval().to(self.device)
             net.load_state_dict(load_url(model_url, map_location=self.device, check_hash=True))
@@ -446,6 +467,9 @@ class DeepFakeDetector:
             if analysis_id:
                 self._emit_progress(analysis_id, 'complete', 100, 'Analysis complete!')
 
+            # Cleanup memory
+            self._cleanup_memory()
+
             return {
                 'analysis_id': analysis_id, 'status': 'completed', 'type': 'image',
                 'verdict': 'fake' if is_fake else 'real',
@@ -465,9 +489,7 @@ class DeepFakeDetector:
         if analysis_id:
             self._emit_progress(analysis_id, 'analyzing', 60, f'Running inference on {faces_detected} face(s)...')
 
-        # --- Analyze ALL detected faces with MULTI-MODEL ENSEMBLE ---
-        # Using multiple models dramatically improves detection on face-swap deepfakes.
-        # Different model/dataset combos catch different manipulation types.
+        # --- Analyze ALL detected faces ---
         all_face_predictions = []
         for face in im_faces['faces']:
             faces_t = torch.stack([transf(image=face)['image']])
@@ -475,38 +497,40 @@ class DeepFakeDetector:
                 pred = torch.sigmoid(net(faces_t.to(self.device))).cpu().numpy().flatten()
             all_face_predictions.append(float(pred[0]))
 
-        # Cross-validate with additional models for better accuracy
-        ensemble_predictions = list(all_face_predictions)  # start with primary model
+        ensemble_predictions = list(all_face_predictions)
         ensemble_models_used = [f"{model}_{dataset}"]
 
-        # Try alternative dataset (if primary is DFDC, also try FFPP and vice versa)
-        alt_dataset = 'FFPP' if dataset == 'DFDC' else 'DFDC'
-        try:
-            alt_net = self._get_model(model, alt_dataset)
-            alt_transf = self._get_transformer(alt_net)
-            for face in im_faces['faces']:
-                faces_t = torch.stack([alt_transf(image=face)['image']])
-                with torch.no_grad():
-                    pred = torch.sigmoid(alt_net(faces_t.to(self.device))).cpu().numpy().flatten()
-                ensemble_predictions.append(float(pred[0]))
-            ensemble_models_used.append(f"{model}_{alt_dataset}")
-        except Exception:
-            pass  # alternative model not available, skip
-
-        # Try a different architecture (EfficientNetB4ST) for cross-validation
-        cross_model = 'EfficientNetB4ST'
-        if cross_model != model:
+        # In LOW_MEMORY_MODE, skip ensemble to save memory
+        # Otherwise, cross-validate with additional models for better accuracy
+        if not LOW_MEMORY_MODE:
+            # Try alternative dataset (if primary is DFDC, also try FFPP and vice versa)
+            alt_dataset = 'FFPP' if dataset == 'DFDC' else 'DFDC'
             try:
-                cross_net = self._get_model(cross_model, dataset)
-                cross_transf = self._get_transformer(cross_net)
+                alt_net = self._get_model(model, alt_dataset)
+                alt_transf = self._get_transformer(alt_net)
                 for face in im_faces['faces']:
-                    faces_t = torch.stack([cross_transf(image=face)['image']])
+                    faces_t = torch.stack([alt_transf(image=face)['image']])
                     with torch.no_grad():
-                        pred = torch.sigmoid(cross_net(faces_t.to(self.device))).cpu().numpy().flatten()
+                        pred = torch.sigmoid(alt_net(faces_t.to(self.device))).cpu().numpy().flatten()
                     ensemble_predictions.append(float(pred[0]))
-                ensemble_models_used.append(f"{cross_model}_{dataset}")
+                ensemble_models_used.append(f"{model}_{alt_dataset}")
             except Exception:
-                pass
+                pass  # alternative model not available, skip
+
+            # Try a different architecture (EfficientNetB4ST) for cross-validation
+            cross_model = 'EfficientNetB4ST'
+            if cross_model != model:
+                try:
+                    cross_net = self._get_model(cross_model, dataset)
+                    cross_transf = self._get_transformer(cross_net)
+                    for face in im_faces['faces']:
+                        faces_t = torch.stack([cross_transf(image=face)['image']])
+                        with torch.no_grad():
+                            pred = torch.sigmoid(cross_net(faces_t.to(self.device))).cpu().numpy().flatten()
+                        ensemble_predictions.append(float(pred[0]))
+                    ensemble_models_used.append(f"{cross_model}_{dataset}")
+                except Exception:
+                    pass
 
         # Use the MAX fake probability across all faces AND all models
         # (if ANY model on ANY face detects fakeness, flag the image)
@@ -569,6 +593,9 @@ class DeepFakeDetector:
         if analysis_id:
             self._emit_progress(analysis_id, 'complete', 100, 'Analysis complete!')
 
+        # Cleanup memory after inference
+        self._cleanup_memory()
+
         return {
             'analysis_id': analysis_id, 'status': 'completed', 'type': 'image',
             'verdict': 'fake' if is_fake else 'real',
@@ -576,7 +603,7 @@ class DeepFakeDetector:
             'threshold': threshold, 'is_fake': is_fake,
             'faces_detected': faces_detected,
             'analysis_details': {
-                'method': 'ensemble_combined',
+                'method': 'single_model' if LOW_MEMORY_MODE else 'ensemble_combined',
                 'model_confidence': round(model_confidence, 4),
                 'model_confidence_avg': round(avg_model_confidence, 4),
                 'per_face_scores': [round(p, 4) for p in all_face_predictions],
@@ -658,6 +685,9 @@ class DeepFakeDetector:
 
         if analysis_id:
             self._emit_progress(analysis_id, 'complete', 100, 'Analysis complete!')
+
+        # Cleanup memory after inference
+        self._cleanup_memory()
 
         return {
             'analysis_id': analysis_id, 'status': 'completed', 'type': 'video',
