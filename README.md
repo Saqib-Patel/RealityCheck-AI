@@ -12,7 +12,6 @@
 ![Python](https://img.shields.io/badge/Python_3.10+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch_2.0-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
 ![Flask](https://img.shields.io/badge/Flask-000000?style=flat-square&logo=flask&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![WebSocket](https://img.shields.io/badge/WebSocket-010101?style=flat-square&logo=socketdotio&logoColor=white)
 
 </div>
@@ -77,7 +76,7 @@ Users upload images or videos through a modern Next.js frontend, and the Flask b
 | 🎬 **Image + Video Support** | Frame-by-frame video analysis with batch inference (16 frames/batch) to prevent GPU OOM |
 | 📊 **Detailed Analytics** | Per-face scores, per-model breakdown, individual artifact channel scores, and exportable reports |
 | 🔒 **Privacy-First** | Zero data persistence — files processed in-memory and deleted immediately after analysis |
-| 🐳 **Docker-Ready** | Full `docker-compose.yml` with production configs for one-command deployment |
+| � **Cloud-Deployed** | Production-ready on Render (backend) + Vercel (frontend) with optimized memory footprint |
 | 🎨 **Premium UI** | Cyberpunk Aurora theme with Framer Motion animations, glassmorphism, and responsive design |
 
 ---
@@ -144,12 +143,6 @@ npm run dev
 ```
 
 **Frontend** → http://localhost:3000 &nbsp;|&nbsp; **API** → http://localhost:5000 &nbsp;|&nbsp; **Health** → http://localhost:5000/health
-
-### Docker
-```bash
-cp .env.example .env
-docker-compose up --build
-```
 
 ---
 
@@ -234,15 +227,13 @@ DeepFake-Detection-Hub/
 ├── backend/                    # Flask REST API + WebSocket server
 │   └── app/
 │       ├── routes/             # API endpoints (api.py, health.py)
-│       ├── services/           # Core logic (detector.py, result_manager.py)
+│       ├── services/           # Core logic (optimized_detector.py, result_manager.py)
 │       ├── utils/              # Input validation
 │       └── websocket/          # Socket.IO event handlers
 │
 ├── architectures/              # PyTorch model definitions + pretrained weight URLs
 ├── blazeface/                  # BlazeFace face detection (anchors + weights)
 ├── isplutils/                  # Image processing utilities
-├── docker-compose.yml          # Multi-service Docker orchestration
-├── Dockerfile.backend          # Backend container config
 └── render.yaml                 # Render.com deployment blueprint
 ```
 
@@ -253,10 +244,10 @@ DeepFake-Detection-Hub/
 | Layer | Technologies |
 |-------|-------------|
 | **Frontend** | Next.js 15, React 18, TypeScript, Tailwind CSS, Framer Motion, Socket.IO Client, Radix UI, Lucide Icons |
-| **Backend** | Flask, Flask-SocketIO, Gunicorn, Eventlet, Python 3.10+ |
+| **Backend** | Flask, Flask-SocketIO, Gunicorn, gevent, Python 3.10+ |
 | **ML/AI** | PyTorch 2.0, EfficientNet (with Auto-Attention), BlazeFace, DCT/FFT Spectral Analysis |
 | **Image Processing** | OpenCV, Pillow, NumPy, SciPy (DCT, uniform_filter, correlation) |
-| **DevOps** | Docker, Docker Compose, Render, Vercel |
+| **DevOps** | Render, Vercel |
 
 ---
 
