@@ -1,16 +1,22 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
+const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000';
+
+// Debug log for production troubleshooting
+if (typeof window !== 'undefined') {
+    console.log('[API Client] Base URL:', baseURL);
+}
+
 export const apiClient = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000',
+    baseURL,
     headers: { 'Content-Type': 'application/json' },
     timeout: 90000, // 90s to handle Render free tier cold starts
 });
 
 apiClient.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
-        }
+        // Log all requests for debugging
+        console.log(`[API] ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
 
         // bust cache on GETs
         if (config.method === 'get') {

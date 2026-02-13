@@ -6,7 +6,7 @@ export const API_ENDPOINTS = {
     COMPARE: '/api/v1/compare',
     RESULTS: '/api/v1/results',
     RESULT_BY_ID: (id: string) => `/api/v1/results/${id}`,
-    HEALTH: '/health',
+    HEALTH: '/health/',
 } as const;
 
 export const WS_EVENTS = {

@@ -21,7 +21,7 @@ export function ServerStatus() {
             setStatus('checking');
 
             try {
-                await apiClient.get('/health', { timeout: 15000 });
+                await apiClient.get('/health/', { timeout: 15000 });
                 setStatus('online');
             } catch (error) {
                 const elapsed = Date.now() - startTime;
