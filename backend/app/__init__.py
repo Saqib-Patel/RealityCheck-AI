@@ -1,11 +1,52 @@
 import os
+import gc
+import logging
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
 
 from config import get_config
 
-socketio = SocketIO(cors_allowed_origins="*", async_mode='threading')
+logger = logging.getLogger(__name__)
+
+# ── Memory optimizations (set BEFORE any heavy imports) ──────────────────
+os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+os.environ['OMP_NUM_THREADS'] = '1'          # single-threaded BLAS – saves ~50 MB
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+
+# Force non-interactive matplotlib backend (no Tk/Qt)
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+except ImportError:
+    pass
+
+# ── SocketIO – use gevent async mode (replaces eventlet) ────────────────
+socketio = SocketIO(
+    cors_allowed_origins="*",
+    async_mode='gevent',
+    ping_timeout=60,
+    ping_interval=25,
+    logger=False,
+    engineio_logger=False,
+)
+
+# ── Global detector (loaded ONCE, reused across all requests) ───────────
+DETECTOR = None
+
+
+def get_detector():
+    """Return the global detector, initialising lazily on first call."""
+    global DETECTOR
+    if DETECTOR is None:
+        logger.info("Initialising global OptimizedDetector …")
+        from app.services.optimized_detector import OptimizedDetector
+        DETECTOR = OptimizedDetector()
+        gc.collect()
+        logger.info("OptimizedDetector ready.")
+    return DETECTOR
 
 
 def create_app(config_class=None):
@@ -15,7 +56,12 @@ def create_app(config_class=None):
         config_class = get_config()
     app.config.from_object(config_class)
 
-    # Allow all origins for cross-origin requests
+    # Hard-cap upload size to 10 MB (overrides any config value)
+    app.config['MAX_CONTENT_LENGTH'] = min(
+        app.config.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024),
+        10 * 1024 * 1024,
+    )
+
     CORS(app, resources={r"/*": {"origins": "*"}})
     socketio.init_app(app)
 
@@ -34,7 +80,8 @@ def create_app(config_class=None):
     def root():
         return {
             'name': 'RealityCheck AI API',
-            'version': '2.0.0',
+            'version': '3.0.0',
+            'memory_mode': 'optimised-512mb',
             'endpoints': {
                 'health': '/health/',
                 'models': '/api/v1/models',

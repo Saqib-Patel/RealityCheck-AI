@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: deepfake-detection-api
+    name: realitycheck-api
     runtime: docker
     dockerfilePath: ./Dockerfile.backend
     dockerContext: .
     region: oregon
-    plan: starter  # Change to "standard" for production
-    healthCheckPath: /health
+    plan: free
+    healthCheckPath: /health/
     envVars:
       - key: FLASK_ENV
         value: production
@@ -15,10 +15,21 @@ services:
       - key: CORS_ORIGINS
         sync: false  # Set manually after frontend deployment
       - key: PORT
-        value: 5000
+        value: "5000"
       - key: PYTHONUNBUFFERED
         value: "1"
-    disk:
-      name: deepfake-data
-      mountPath: /app/uploads
-      sizeGB: 1  # Increase as needed
+      # ── Memory optimisation flags ──────────────────────────────
+      - key: USE_ML_MODEL
+        value: "true"              # set to false to run artifact-only (~100 MB)
+      - key: ENABLE_ARTIFACT_ANALYSIS
+        value: "true"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MKL_NUM_THREADS
+        value: "1"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: MPLCONFIGDIR
+        value: /tmp/matplotlib
+      - key: PYTORCH_CUDA_ALLOC_CONF
+        value: max_split_size_mb:128

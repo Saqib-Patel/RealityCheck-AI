@@ -1,20 +1,40 @@
 import os
 import uuid
+import logging
 import threading
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 
-from app.services.detector import DeepFakeDetector
+from app import get_detector
 from app.services.result_manager import ResultManager
 from app.utils.validators import validate_analysis_params
+from app.services.optimized_detector import downscale_image_file
+
+logger = logging.getLogger(__name__)
 
 api_bp = Blueprint('api', __name__)
 
-detector = DeepFakeDetector()
+# Use the GLOBAL singleton detector – never instantiate per-request
 result_manager = ResultManager()
 
 # Track in-progress analyses
 _analysis_status = {}
+
+
+def _save_and_downscale(file, analysis_id, upload_folder):
+    """Save upload, then immediately downscale to ≤512 px / 85 % JPEG."""
+    filename = secure_filename(f"{analysis_id}_{file.filename}")
+    filepath = os.path.join(upload_folder, filename)
+    file.save(filepath)
+
+    # Reject files > 10 MB even if Flask didn't catch it
+    if os.path.getsize(filepath) > 10 * 1024 * 1024:
+        os.remove(filepath)
+        return None, 'File too large (max 10 MB)'
+
+    # Downscale immediately to save memory during inference
+    downscale_image_file(filepath, max_dim=512, quality=85)
+    return filepath, None
 
 
 def _run_image_analysis_async(filepath, model, dataset, threshold, analysis_id, app):
@@ -22,6 +42,7 @@ def _run_image_analysis_async(filepath, model, dataset, threshold, analysis_id, 
     with app.app_context():
         try:
             _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
+            detector = get_detector()
             result = detector.analyze_image(
                 image_path=filepath, model=model, dataset=dataset,
                 threshold=threshold, analysis_id=analysis_id
@@ -29,6 +50,7 @@ def _run_image_analysis_async(filepath, model, dataset, threshold, analysis_id, 
             result_manager.save_result(analysis_id, result)
             _analysis_status[analysis_id] = {'status': 'completed', 'progress': 100}
         except Exception as e:
+            logger.error(f"Image analysis failed: {e}")
             _analysis_status[analysis_id] = {'status': 'failed', 'error': str(e)}
             result_manager.save_result(analysis_id, {
                 'analysis_id': analysis_id, 'status': 'failed', 'error': str(e)
@@ -43,6 +65,7 @@ def _run_video_analysis_async(filepath, model, dataset, threshold, frames, analy
     with app.app_context():
         try:
             _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
+            detector = get_detector()
             result = detector.analyze_video(
                 video_path=filepath, model=model, dataset=dataset,
                 threshold=threshold, frames=frames, analysis_id=analysis_id
@@ -50,6 +73,7 @@ def _run_video_analysis_async(filepath, model, dataset, threshold, frames, analy
             result_manager.save_result(analysis_id, result)
             _analysis_status[analysis_id] = {'status': 'completed', 'progress': 100}
         except Exception as e:
+            logger.error(f"Video analysis failed: {e}")
             _analysis_status[analysis_id] = {'status': 'failed', 'error': str(e)}
             result_manager.save_result(analysis_id, {
                 'analysis_id': analysis_id, 'status': 'failed', 'error': str(e)
@@ -155,9 +179,9 @@ def analyze_image():
         return jsonify({'error': err}), 400
 
     analysis_id = str(uuid.uuid4())
-    filename = secure_filename(f"{analysis_id}_{file.filename}")
-    filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
+    filepath, err = _save_and_downscale(file, analysis_id, current_app.config['UPLOAD_FOLDER'])
+    if err:
+        return jsonify({'error': err}), 400
 
     # Run analysis in background thread - return immediately
     _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
@@ -200,6 +224,11 @@ def analyze_video():
     filename = secure_filename(f"{analysis_id}_{file.filename}")
     filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
+
+    # Reject oversized files
+    if os.path.getsize(filepath) > 10 * 1024 * 1024:
+        os.remove(filepath)
+        return jsonify({'error': 'File too large (max 10 MB)'}), 400
 
     # Run analysis in background thread - return immediately
     _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
@@ -245,7 +274,7 @@ def analyze_batch():
         file_type = 'video' if allowed_file(file.filename, 'video') else 'image'
         file_list.append({'id': file_id, 'path': filepath, 'original_name': file.filename, 'type': file_type})
 
-    result = detector.analyze_batch(
+    result = get_detector().analyze_batch(
         files=file_list, model=model, dataset=dataset,
         threshold=threshold, batch_id=batch_id
     )
@@ -271,7 +300,7 @@ def compare_models():
     file_type = 'video' if allowed_file(file.filename, 'video') else 'image'
 
     try:
-        results = detector.compare_models(
+        results = get_detector().compare_models(
             file_path=filepath, file_type=file_type,
             models=models, dataset=dataset, threshold=threshold
         )

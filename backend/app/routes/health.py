@@ -1,25 +1,40 @@
+import os
+import gc
 from flask import Blueprint, jsonify
-import torch
 
 health_bp = Blueprint('health', __name__)
 
 
 @health_bp.route('/', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'healthy', 'service': 'deepfake-detection-api', 'version': '2.0.0'})
+    """Lightweight health check – no heavy imports, no torch."""
+    return jsonify({'status': 'healthy', 'service': 'deepfake-detection-api', 'version': '3.0.0'})
 
 
 @health_bp.route('/ready', methods=['GET'])
 def readiness_check():
-    gpu = torch.cuda.is_available()
+    """Report whether the ML model is loaded (lazy – only checks, never loads)."""
+    from app import DETECTOR
+    model_loaded = DETECTOR is not None
     return jsonify({
-        'status': 'ready',
-        'gpu_available': gpu,
-        'gpu_name': torch.cuda.get_device_name(0) if gpu else None,
-        'torch_version': torch.__version__
+        'status': 'ready' if model_loaded else 'warming',
+        'model_loaded': model_loaded,
+        'mode': 'cpu',
     })
 
 
 @health_bp.route('/live', methods=['GET'])
 def liveness_check():
     return jsonify({'status': 'alive'})
+
+
+@health_bp.route('/memory', methods=['GET'])
+def memory_check():
+    """Diagnostic endpoint – reports RSS in MB."""
+    try:
+        import resource
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # KB → MB (Linux)
+    except Exception:
+        rss = -1
+    gc.collect()
+    return jsonify({'rss_mb': round(rss, 1)})

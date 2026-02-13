@@ -15,15 +15,17 @@ export function ServerStatus() {
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
+        let mounted = true;
 
         const checkHealth = async () => {
             const startTime = Date.now();
-            setStatus('checking');
+            if (mounted) setStatus('checking');
 
             try {
                 await apiClient.get('/health/', { timeout: 15000 });
-                setStatus('online');
+                if (mounted) setStatus('online');
             } catch (error) {
+                if (!mounted) return;
                 const elapsed = Date.now() - startTime;
 
                 // If timeout or network error after 10s, likely cold start
@@ -36,18 +38,19 @@ export function ServerStatus() {
             }
         };
 
-        // Check immediately
+        // Check once on mount
         checkHealth();
 
-        // Recheck every 30 seconds if waking/offline
+        // Re-check every 60 seconds (not 30) to reduce backend load on free tier
         interval = setInterval(() => {
-            if (status === 'waking' || status === 'offline') {
-                checkHealth();
-            }
-        }, 30000);
+            checkHealth();
+        }, 60000);
 
-        return () => clearInterval(interval);
-    }, [status]);
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
+    }, []); // stable deps – no re-run on status change
 
     // Don't show anything if online or checking initially
     if (status === 'online' || (status === 'checking' && wakingTime === 0)) {

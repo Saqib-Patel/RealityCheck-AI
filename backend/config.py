@@ -12,18 +12,23 @@ class Config:
     RESULTS_FOLDER = BASE_DIR / 'results'
     MODELS_FOLDER = BASE_DIR / 'model_weights'
 
-    MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB hard cap
     ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
     ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'avi', 'mov', 'webm'}
 
     DEFAULT_MODEL = 'EfficientNetAutoAttB4'
     DEFAULT_DATASET = 'DFDC'
     DEFAULT_THRESHOLD = 0.5
-    DEFAULT_VIDEO_FRAMES = 50
+    DEFAULT_VIDEO_FRAMES = 30          # reduced from 50 for memory
 
     # CORS: Allow Vercel domains and localhost
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')
-    SOCKETIO_ASYNC_MODE = 'eventlet'
+    SOCKETIO_ASYNC_MODE = 'gevent'     # gevent replaces deprecated eventlet
+
+    # ── Free-tier memory flags (override via env vars) ──────────────
+    ENABLE_ARTIFACT_ANALYSIS = os.environ.get('ENABLE_ARTIFACT_ANALYSIS', 'true').lower() == 'true'
+    USE_ML_MODEL = os.environ.get('USE_ML_MODEL', 'true').lower() == 'true'
+    MAX_IMAGE_DIM = int(os.environ.get('MAX_IMAGE_DIM', '512'))
 
 
 class DevelopmentConfig(Config):
