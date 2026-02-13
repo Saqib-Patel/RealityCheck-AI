@@ -40,14 +40,58 @@ function mapResponse(data: Record<string, unknown>, file: File): AnalysisResult 
     };
 }
 
+// Helper to wait between polls
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Poll for analysis result until completed or failed
+async function pollForResult(analysisId: string, file: File, maxAttempts = 120): Promise<AnalysisResult> {
+    console.log(`[Analysis] Polling for result: ${analysisId}`);
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const { data, status } = await apiClient.get<Record<string, unknown>>(
+            API_ENDPOINTS.RESULT_BY_ID(analysisId),
+            { validateStatus: () => true } // Don't throw on non-2xx
+        );
+        
+        console.log(`[Analysis] Poll attempt ${attempt + 1}: status=${data.status}`);
+        
+        if (status === 200 && data.status === 'completed') {
+            return mapResponse(data, file);
+        }
+        
+        if (status === 500 || data.status === 'failed') {
+            throw new Error((data.error as string) || 'Analysis failed on server');
+        }
+        
+        // Still processing - wait and retry (2s interval)
+        await sleep(2000);
+    }
+    
+    throw new Error('Analysis timed out. Please try again.');
+}
+
 async function postAnalysis(endpoint: string, file: File, model: string, dataset: string, onProgress?: (n: number) => void) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('model', model);
     formData.append('dataset', dataset);
 
+    // Upload file - backend returns 202 with analysis_id
     const { data } = await apiClient.post<Record<string, unknown>>(endpoint, formData, createUploadConfig(onProgress));
-    return mapResponse(data, file);
+    
+    const analysisId = data.analysis_id as string;
+    
+    // If backend returned immediate result (status: completed), use it
+    if (data.status === 'completed') {
+        return mapResponse(data, file);
+    }
+    
+    // Otherwise poll for result
+    if (!analysisId) {
+        throw new Error('No analysis_id returned from server');
+    }
+    
+    return pollForResult(analysisId, file);
 }
 
 export const analyzeImage = (file: File, model: string, dataset: string, onProgress?: (n: number) => void) =>

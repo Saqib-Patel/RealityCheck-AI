@@ -1,5 +1,6 @@
 import os
 import uuid
+import threading
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.utils import secure_filename
 
@@ -11,6 +12,51 @@ api_bp = Blueprint('api', __name__)
 
 detector = DeepFakeDetector()
 result_manager = ResultManager()
+
+# Track in-progress analyses
+_analysis_status = {}
+
+
+def _run_image_analysis_async(filepath, model, dataset, threshold, analysis_id, app):
+    """Run image analysis in background thread."""
+    with app.app_context():
+        try:
+            _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
+            result = detector.analyze_image(
+                image_path=filepath, model=model, dataset=dataset,
+                threshold=threshold, analysis_id=analysis_id
+            )
+            result_manager.save_result(analysis_id, result)
+            _analysis_status[analysis_id] = {'status': 'completed', 'progress': 100}
+        except Exception as e:
+            _analysis_status[analysis_id] = {'status': 'failed', 'error': str(e)}
+            result_manager.save_result(analysis_id, {
+                'analysis_id': analysis_id, 'status': 'failed', 'error': str(e)
+            })
+        finally:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+
+
+def _run_video_analysis_async(filepath, model, dataset, threshold, frames, analysis_id, app):
+    """Run video analysis in background thread."""
+    with app.app_context():
+        try:
+            _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
+            result = detector.analyze_video(
+                video_path=filepath, model=model, dataset=dataset,
+                threshold=threshold, frames=frames, analysis_id=analysis_id
+            )
+            result_manager.save_result(analysis_id, result)
+            _analysis_status[analysis_id] = {'status': 'completed', 'progress': 100}
+        except Exception as e:
+            _analysis_status[analysis_id] = {'status': 'failed', 'error': str(e)}
+            result_manager.save_result(analysis_id, {
+                'analysis_id': analysis_id, 'status': 'failed', 'error': str(e)
+            })
+        finally:
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
 
 def allowed_file(filename, file_type='image'):
@@ -113,18 +159,20 @@ def analyze_image():
     filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
-    try:
-        result = detector.analyze_image(
-            image_path=filepath, model=model, dataset=dataset,
-            threshold=threshold, analysis_id=analysis_id
-        )
-        result_manager.save_result(analysis_id, result)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e), 'analysis_id': analysis_id, 'status': 'failed'}), 500
-    finally:
-        if os.path.exists(filepath):
-            os.remove(filepath)
+    # Run analysis in background thread - return immediately
+    _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
+    thread = threading.Thread(
+        target=_run_image_analysis_async,
+        args=(filepath, model, dataset, threshold, analysis_id, current_app._get_current_object())
+    )
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'analysis_id': analysis_id,
+        'status': 'processing',
+        'message': 'Analysis started. Poll /api/v1/results/{id} or listen to WebSocket for progress.'
+    }), 202
 
 
 @api_bp.route('/analyze/video', methods=['POST'])
@@ -153,18 +201,20 @@ def analyze_video():
     filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
-    try:
-        result = detector.analyze_video(
-            video_path=filepath, model=model, dataset=dataset,
-            threshold=threshold, frames=frames, analysis_id=analysis_id
-        )
-        result_manager.save_result(analysis_id, result)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e), 'analysis_id': analysis_id, 'status': 'failed'}), 500
-    finally:
-        if os.path.exists(filepath):
-            os.remove(filepath)
+    # Run analysis in background thread - return immediately
+    _analysis_status[analysis_id] = {'status': 'processing', 'progress': 0}
+    thread = threading.Thread(
+        target=_run_video_analysis_async,
+        args=(filepath, model, dataset, threshold, frames, analysis_id, current_app._get_current_object())
+    )
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'analysis_id': analysis_id,
+        'status': 'processing',
+        'message': 'Analysis started. Poll /api/v1/results/{id} or listen to WebSocket for progress.'
+    }), 202
 
 
 @api_bp.route('/analyze/batch', methods=['POST'])
@@ -241,6 +291,24 @@ def get_results():
 
 @api_bp.route('/results/<result_id>', methods=['GET'])
 def get_result(result_id):
+    # First check if analysis is still in progress
+    if result_id in _analysis_status:
+        status_info = _analysis_status[result_id]
+        if status_info['status'] == 'processing':
+            return jsonify({
+                'analysis_id': result_id,
+                'status': 'processing',
+                'progress': status_info.get('progress', 0),
+                'message': 'Analysis in progress...'
+            }), 202
+        elif status_info['status'] == 'failed':
+            return jsonify({
+                'analysis_id': result_id,
+                'status': 'failed',
+                'error': status_info.get('error', 'Unknown error')
+            }), 500
+
+    # Check for completed result
     result = result_manager.get_result(result_id)
     if result is None:
         return jsonify({'error': 'Result not found'}), 404
