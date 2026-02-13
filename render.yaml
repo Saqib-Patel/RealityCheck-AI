@@ -6,6 +6,7 @@ services:
     dockerContext: .
     region: oregon
     plan: free
+    startCommand: "cd backend && gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --workers 1 --worker-connections 500 --bind 0.0.0.0:5000 --timeout 600 --preload run:app"
     healthCheckPath: /health/
     envVars:
       - key: FLASK_ENV
