@@ -458,13 +458,3 @@ class FaceExtractor:
             if len(frame_data["faces"]) > 0:
                 frame_data["faces"] = frame_data["faces"][:1]
                 frame_data["scores"] = frame_data["scores"][:1]
-
-    # TODO: def filter_likely_false_positives(self, crops):
-    #   if only some frames have more than 1 face, it's likely a false positive
-    #   if most frames have more than 1 face, it's probably two people
-    #   so find the % of frames with > 1 face; if > 0.X, keep the two best faces
-
-    # TODO: def filter_by_score(self, crops, min_score) to remove any
-    # crops with a confidence score lower than min_score
-
-    # TODO: def sort_by_histogram(self, crops) for videos with 2 people.

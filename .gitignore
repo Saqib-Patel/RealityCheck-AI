@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.production.local
+backend/.env.production
+
+# Uploads & results (runtime data, not code)
+uploads/
+results/
+Sample images/
+
+# Model weights cache
+model_weights/
+*.pth
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Virtual env
+.venv/
+venv/

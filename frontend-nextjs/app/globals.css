@@ -1,0 +1,199 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BASE STYLES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+    :root {
+        --font-inter: 'Inter', system-ui, sans-serif;
+        --font-space: 'Space Grotesk', 'Inter', sans-serif;
+        --gradient-aurora: linear-gradient(135deg, #00f0ff 0%, #a855f7 50%, #ff00d4 100%);
+        --gradient-real: linear-gradient(135deg, #00ffc8 0%, #00f0ff 100%);
+        --gradient-fake: linear-gradient(135deg, #ff0066 0%, #ff6b00 100%);
+    }
+
+    * {
+        @apply border-dark-border;
+    }
+
+    body {
+        @apply bg-dark-void text-text-primary;
+        font-family: var(--font-inter);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        @apply bg-dark-deep;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        @apply bg-dark-hover rounded-full;
+        border: 2px solid transparent;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        @apply bg-accent-cyan/50;
+    }
+
+    /* Selection */
+    ::selection {
+        @apply bg-accent-cyan/30 text-text-white;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMPONENT STYLES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+
+    /* Container */
+    .container-custom {
+        @apply mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl w-full;
+    }
+
+    /* Gradient text */
+    .text-gradient-aurora {
+        @apply bg-clip-text text-transparent;
+        background-image: var(--gradient-aurora);
+    }
+
+    .text-gradient-primary {
+        @apply bg-clip-text text-transparent;
+        background-image: linear-gradient(135deg, #00f0ff, #ff00d4);
+    }
+
+    .text-gradient-real {
+        @apply bg-clip-text text-transparent;
+        background-image: var(--gradient-real);
+    }
+
+    .text-gradient-fake {
+        @apply bg-clip-text text-transparent;
+        background-image: var(--gradient-fake);
+    }
+
+    /* Gradient backgrounds */
+    .bg-gradient-aurora {
+        background-image: var(--gradient-aurora);
+    }
+
+    /* Glass effect */
+    .glass {
+        @apply bg-dark-elevated/80 backdrop-blur-xl border border-white/10;
+    }
+
+    /* Orbs */
+    .orb-cyan {
+        @apply absolute w-64 h-64 rounded-full opacity-20 blur-3xl;
+        background: radial-gradient(circle, #00f0ff 0%, transparent 70%);
+        animation: pulse-slow 6s ease-in-out infinite;
+    }
+
+    .orb-magenta {
+        @apply absolute w-48 h-48 rounded-full opacity-20 blur-3xl;
+        background: radial-gradient(circle, #ff00d4 0%, transparent 70%);
+        animation: pulse-slow 8s ease-in-out infinite;
+        animation-delay: 2s;
+    }
+
+    .orb-purple {
+        @apply absolute w-56 h-56 rounded-full opacity-15 blur-3xl;
+        background: radial-gradient(circle, #a855f7 0%, transparent 70%);
+        animation: pulse-slow 7s ease-in-out infinite;
+        animation-delay: 1s;
+    }
+
+    .orb-lime {
+        @apply absolute w-40 h-40 rounded-full opacity-10 blur-3xl;
+        background: radial-gradient(circle, #39ff14 0%, transparent 70%);
+        animation: pulse-slow 9s ease-in-out infinite;
+        animation-delay: 3s;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITY EXTENSIONS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+
+    /* Focus ring */
+    .focus-ring {
+        @apply focus:outline-none focus:ring-2 focus:ring-accent-cyan/50 focus:ring-offset-2 focus:ring-offset-dark-void;
+    }
+
+    /* Animations for keyframes defined in config */
+    .animate-pulse-slow {
+        animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    .animate-glow-pulse {
+        animation: glow-pulse 2s ease-in-out infinite;
+    }
+
+    .animate-gradient-shift {
+        animation: gradient-shift 8s ease infinite;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   KEYFRAMES (defined here for orbs and extras)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes pulse-slow {
+
+    0%,
+    100% {
+        opacity: 0.15;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.25;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes glow-pulse {
+
+    0%,
+    100% {
+        box-shadow:
+            0 0 20px rgba(0, 240, 255, 0.3),
+            0 0 40px rgba(255, 0, 212, 0.2);
+    }
+
+    50% {
+        box-shadow:
+            0 0 30px rgba(0, 240, 255, 0.5),
+            0 0 60px rgba(255, 0, 212, 0.3);
+    }
+}
+
+@keyframes gradient-shift {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}

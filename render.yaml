@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: deepfake-detection-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    dockerContext: .
+    region: oregon
+    plan: starter  # Change to "standard" for production
+    healthCheckPath: /health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false  # Set manually after frontend deployment
+      - key: PORT
+        value: 5000
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    disk:
+      name: deepfake-data
+      mountPath: /app/uploads
+      sizeGB: 1  # Increase as needed
